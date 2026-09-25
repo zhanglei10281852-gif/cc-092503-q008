@@ -306,6 +306,40 @@ CREATE TABLE IF NOT EXISTS inventory_counts (
     UNIQUE(session_id, sample_id)
 );
 
+CREATE TABLE IF NOT EXISTS inventory_session_baselines (
+    session_id INTEGER NOT NULL REFERENCES inventory_sessions(id) ON DELETE CASCADE,
+    sample_id INTEGER NOT NULL REFERENCES samples(id),
+    sample_version INTEGER NOT NULL,
+    last_event_id INTEGER NOT NULL,
+    difference_kind TEXT,
+    PRIMARY KEY(session_id, sample_id)
+);
+
+CREATE TABLE IF NOT EXISTS inventory_dispositions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    disposition_code TEXT NOT NULL UNIQUE,
+    session_id INTEGER NOT NULL REFERENCES inventory_sessions(id),
+    sample_id INTEGER NOT NULL REFERENCES samples(id),
+    difference_kind TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('review','relocate','adjust_quantity','report_loss')),
+    target_quantity REAL,
+    target_location_id INTEGER REFERENCES storage_locations(id),
+    evidence_summary TEXT NOT NULL,
+    responsibility_note TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN (
+        'awaiting_approval','rejected','needs_rereview','resolved','executed'
+    )),
+    approval_request_id INTEGER REFERENCES approval_requests(id),
+    expected_version INTEGER,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    updated_by INTEGER NOT NULL REFERENCES users(id),
+    executed_by INTEGER REFERENCES users(id),
+    executed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(session_id, sample_id)
+);
+
 CREATE TABLE IF NOT EXISTS anomaly_cases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     case_code TEXT NOT NULL UNIQUE,
