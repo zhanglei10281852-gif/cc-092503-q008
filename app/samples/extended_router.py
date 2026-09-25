@@ -8,10 +8,14 @@ from app.core.security import Principal
 from app.samples.extended_schemas import (
     CollectionCreate,
     DestructionExecute,
+    DispositionCreate,
+    DispositionUpdate,
+    DispositionVerify,
     InventoryCount,
     InventoryStart,
     TransferCreate,
 )
+from app.samples.dispositions import DispositionService
 from app.samples.inventory import InventoryService, StockSummaryService
 from app.samples.operations import CollectionService, DestructionService, LineageService, TransferService
 from app.samples.reporting import BatchReconciliationService, ExceptionAgingService
@@ -64,7 +68,41 @@ def reconcile_inventory(session_id: int, principal: Principal = Depends(current_
 @router.post("/inventory/{session_id}/close")
 def close_inventory(session_id: int, principal: Principal = Depends(current_principal)):
     with transaction(immediate=True) as connection:
-        return InventoryService(connection).close_without_adjustment(principal, session_id)
+        return InventoryService(connection).close(principal, session_id)
+
+
+@router.get("/inventory/{session_id}/differences")
+def list_dispositions(session_id: int, principal: Principal = Depends(current_principal)):
+    return DispositionService(get_connection()).list(principal, session_id)
+
+
+@router.post("/inventory/{session_id}/dispositions", status_code=status.HTTP_201_CREATED)
+def create_disposition(session_id: int, payload: DispositionCreate, principal: Principal = Depends(current_principal)):
+    with transaction(immediate=True) as connection:
+        return DispositionService(connection).create(principal, session_id, payload.model_dump())
+
+
+@router.get("/dispositions/{disposition_id}")
+def get_disposition(disposition_id: int, principal: Principal = Depends(current_principal)):
+    return DispositionService(get_connection()).detail(principal, disposition_id)
+
+
+@router.patch("/dispositions/{disposition_id}")
+def update_disposition(disposition_id: int, payload: DispositionUpdate, principal: Principal = Depends(current_principal)):
+    with transaction(immediate=True) as connection:
+        return DispositionService(connection).update(principal, disposition_id, payload.model_dump(exclude_unset=True))
+
+
+@router.post("/dispositions/{disposition_id}/verify")
+def verify_disposition(disposition_id: int, payload: DispositionVerify, principal: Principal = Depends(current_principal)):
+    with transaction(immediate=True) as connection:
+        return DispositionService(connection).verify(principal, disposition_id, payload.comment)
+
+
+@router.post("/dispositions/{disposition_id}/execute", status_code=status.HTTP_201_CREATED)
+def execute_disposition(disposition_id: int, principal: Principal = Depends(current_principal)):
+    with transaction(immediate=True) as connection:
+        return DispositionService(connection).execute(principal, disposition_id)
 
 
 @router.get("/stock/by-location")

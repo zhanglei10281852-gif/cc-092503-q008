@@ -306,6 +306,53 @@ CREATE TABLE IF NOT EXISTS inventory_counts (
     UNIQUE(session_id, sample_id)
 );
 
+CREATE TABLE IF NOT EXISTS inventory_differences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES inventory_sessions(id) ON DELETE CASCADE,
+    sample_id INTEGER NOT NULL REFERENCES samples(id),
+    difference_kind TEXT NOT NULL CHECK(difference_kind IN ('not_counted','missing','quantity_mismatch')),
+    book_quantity REAL NOT NULL,
+    observed_quantity REAL,
+    quantity_delta REAL,
+    created_at TEXT NOT NULL,
+    UNIQUE(session_id, sample_id)
+);
+
+CREATE TABLE IF NOT EXISTS inventory_snapshot_baselines (
+    session_id INTEGER NOT NULL REFERENCES inventory_sessions(id) ON DELETE CASCADE,
+    sample_id INTEGER NOT NULL REFERENCES samples(id),
+    last_event_id INTEGER NOT NULL,
+    PRIMARY KEY(session_id, sample_id)
+);
+
+CREATE TABLE IF NOT EXISTS discrepancy_dispositions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    disposition_code TEXT NOT NULL UNIQUE,
+    session_id INTEGER NOT NULL REFERENCES inventory_sessions(id),
+    sample_id INTEGER NOT NULL REFERENCES samples(id),
+    difference_kind TEXT NOT NULL CHECK(difference_kind IN ('not_counted','missing','quantity_mismatch')),
+    book_quantity REAL NOT NULL,
+    observed_quantity REAL,
+    disposition TEXT NOT NULL CHECK(disposition IN ('review','relocate','quantity_adjust','report_loss')),
+    state TEXT NOT NULL CHECK(state IN ('in_review','pending_approval','rejected','ready','executed')),
+    target_quantity REAL CHECK(target_quantity IS NULL OR target_quantity >= 0),
+    target_location_id INTEGER REFERENCES storage_locations(id),
+    evidence_summary TEXT NOT NULL,
+    responsibility_note TEXT NOT NULL,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    approval_request_id INTEGER REFERENCES approval_requests(id),
+    requires_approval INTEGER NOT NULL CHECK(requires_approval IN (0,1)),
+    reviewed_event_id INTEGER NOT NULL,
+    loss_case_id INTEGER REFERENCES anomaly_cases(id),
+    executed_by INTEGER REFERENCES users(id),
+    executed_at TEXT,
+    executed_event_id INTEGER,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(session_id, sample_id)
+);
+
 CREATE TABLE IF NOT EXISTS anomaly_cases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     case_code TEXT NOT NULL UNIQUE,
@@ -353,6 +400,8 @@ PERMISSIONS = [
     ("approvals.decide", "审批高风险操作", "approvals", "decide"),
     ("locations.read_sensitive", "查看精确保管位置", "locations", "read_sensitive"),
     ("anomalies.manage", "管理异常", "anomalies", "manage"),
+    ("inventory.dispose", "处置盘点差异", "inventory", "dispose"),
+    ("inventory.execute", "执行盘点调整", "inventory", "execute"),
 ]
 
 
@@ -432,6 +481,7 @@ def init_db() -> None:
             "sample_manager": [
                 "samples.read", "samples.write", "samples.consume", "samples.destroy",
                 "loans.manage", "inventory.manage", "anomalies.manage",
+                "inventory.dispose", "inventory.execute",
             ],
             "researcher": ["samples.read", "samples.consume"],
             "approver": ["samples.read", "approvals.decide"],

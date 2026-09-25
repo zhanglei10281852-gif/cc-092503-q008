@@ -258,6 +258,15 @@ class ApprovalService:
         principal.require("approvals.decide")
         before = self.approvals.get(request_id)
         result = self.approvals.decide(request_id, principal.user_id, data["decision"], data.get("comment", ""), to_storage(self.clock.now()))
+        # 盘点差异处置单的双人审批结果需要同步到处置单状态机
+        if result["resource_type"] == "discrepancy_disposition":
+            from app.samples.dispositions import DispositionService
+
+            disposition_service = DispositionService(self.connection, self.clock)
+            if result["state"] == "approved":
+                disposition_service.mark_approved(result)
+            elif result["state"] == "rejected":
+                disposition_service.mark_rejected(result)
         self.audit.record(principal, "approval.decide", "approval_request", str(request_id), before=before, after=result)
         return result
 
